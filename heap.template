@@ -1,0 +1,272 @@
+/*
+This file is part of the aklib c library
+Copyright 2016-2019 by Anders Krogh.
+aklib licensed under the GPLv3, see the file LICENSE.
+*/
+
+/*
+  Template for heap data structures.
+
+  Before including this file you must define what items the heap stores
+  and comparison functions depending on type (min-heap or max-heap)
+
+  A min-heap has the minimum value at the root
+  A max-heap has the maximum value at the root
+
+  You may also define HEAPNAME (defaults to "Heap")
+  If you use more than one type of heap, you must define HEAPNAME for
+  at least one. They must have different names
+
+  ITEM must be a type for which a comparison can be defined.
+
+  For instance it can be a pointer or an int in which case you
+  define
+    "#define ITEM mystruct*" or "#define ITEM int"
+
+  You have to define compare macro
+  COMPARE(x,y) returns
+  	       positive if x is closer to the root than y,
+  	       0 if they are equal and
+	       negative if y is closer to the root
+
+  These can also be functions (inline) that return integer
+
+  These are for a min heap of integers
+  #define COMPARE(x,y) ( (y) - (x) )
+
+  Note that when popping a heap, you cannot always check on return value,
+  so you have to check on size, e.g.
+     while (Heap_size(h)) printf("%d\n",Heap_pop(h));
+
+  These functions are defined (where X is replaced by HEAPNAME)
+  If not specified they takes the heap as only argument
+  X_alloc     takes initial size as arg and returns heap pointer
+  X_free      frees heap (free content before) (return: void)
+  X_pop       pops heap and returns root element
+  X_add       takes heap and new element as args (return: void)
+
+  X_clear     Resets the heap to size 0 (does not free content)
+  X_size      Returns the current number of elements in heap
+  X_maxsize   Returns the size of the current allocation
+  X_root      Returns the root element (without popping)
+  X_accept    takes heap and new element. Returns 1 if either the heap is not full OR
+              new item better than root.
+  X_sort      Takes heap and pointer to size (int *n)
+              Pops all elements and returns a sorted list of pointers to ITEMs
+              The length of the array is stored in *n
+
+  Additionally, the function
+  X_replace(heap,item,force) will add item if the heap is not full (returns 0),
+              or replaces root by item if either
+	      force != 0 (returns root)
+	      item is better than root (returns worst of the two)
+
+
+  NOTE
+
+  * The header undefines everything in the end, so you can include
+  the file multiple times. It means that e.g. HEAPNAME and ITEM
+  are undefined after your #include "heap.h"
+
+  * When popping a heap, you cannot check on return value, so you
+  have to check on size, e.g.
+     while (Heap_size(h)) printf("%d\n",Heap_pop(h));
+
+  * When allocating a heap, you give an initial size. If more items
+  items are added, the heap is re-allocated adding ADDSIZE. Default
+  is 256, but you can redefine, e.g. "#define ADDSIZE 50".
+
+
+  EXAMPLES
+
+  Integer min heap. Functions will be named iHeap_alloc, iHeap_add, etc
+#define HEAPNAME iHeap
+#define ITEM int
+#define COMPARE(x,y) ( (y) - (x) )
+#include "heap.template"
+
+  Min heap for struct using the b element for comparison
+  Functions will be named myHeap_...
+typedef struct { int a; double b; } myStruct;
+#define HEAPNAME myHeap
+#define ITEM myStruct*
+#define COMPARE(x,y) ( ((y)->b) - ((x)->b) )
+#include "heap.template"
+
+
+*/
+
+#include <stdio.h>
+#include <stdlib.h>
+
+// You can define the name of the heap type
+#ifndef HEAPNAME
+#define HEAPNAME Heap
+#endif
+
+#ifndef ADDSIZE
+#define ADDSIZE 256     // Expand heap by this amount when full
+#endif
+
+
+typedef struct {
+  int maxsize;
+  int size;
+  ITEM* items;   // Array of length maxsize
+} HEAPNAME;
+
+// Very strange concatenation in preprocessor requires this
+#define _CONCAT__(A, B) A##B
+#define _CONCAT_(A, B) _CONCAT__(A, B)
+
+// Functions defined
+#define _HEAP_clear_   _CONCAT_(HEAPNAME,_clear)
+#define _HEAP_maxsize_ _CONCAT_(HEAPNAME,_maxsize)
+#define _HEAP_size_    _CONCAT_(HEAPNAME,_size)
+#define _HEAP_root_    _CONCAT_(HEAPNAME,_root)
+#define _HEAP_alloc_   _CONCAT_(HEAPNAME,_alloc)
+#define _HEAP_realloc_ _CONCAT_(HEAPNAME,_realloc)
+#define _HEAP_free_    _CONCAT_(HEAPNAME,_free)
+#define _HEAP_heapify_ _CONCAT_(HEAPNAME,_heapify)
+#define _HEAP_pop_     _CONCAT_(HEAPNAME,_pop)
+#define _HEAP_sort_     _CONCAT_(HEAPNAME,_sort)
+#define _HEAP_add_     _CONCAT_(HEAPNAME,_add)
+#define _HEAP_accept_  _CONCAT_(HEAPNAME,_accept)
+#define _HEAP_replace_ _CONCAT_(HEAPNAME,_replace)
+
+
+// Query heap etc (note that _HEAP_clear_ assumes that items are freed elsewhere)
+static inline void _HEAP_clear_(HEAPNAME *h) {h->size=0;}
+static inline int _HEAP_maxsize_(HEAPNAME *h) {return h->maxsize;}
+static inline int _HEAP_size_(HEAPNAME *h) {return h->size;}
+static inline ITEM _HEAP_root_(HEAPNAME *h) { return (h->size? h->items[0] : (ITEM)0 ); }
+
+#define HeapErrorInternal(x) {fprintf(stderr,"Heap Error: %s\n",x); exit(1); }
+
+static inline HEAPNAME *_HEAP_alloc_(int maxsize) {
+  HEAPNAME *h=(HEAPNAME*)malloc(sizeof(HEAPNAME));
+  if (!h) HeapErrorInternal("Function _HEAP_alloc_ couldn't malloc");
+  h->maxsize = maxsize;
+  h->size=0;
+  h->items = (ITEM*)malloc(maxsize*sizeof(ITEM));
+  if (!h->items) HeapErrorInternal("Function _HEAP_alloc_ couldn't malloc array");
+  return h;
+}
+
+static inline void _HEAP_realloc_(HEAPNAME *h, int maxsize) {
+  if (h->size>maxsize) HeapErrorInternal("_HEAP_realloc_: size>maxsize");
+  h->items = (ITEM*)realloc(h->items,maxsize*sizeof(ITEM));
+  if (!h->items) HeapErrorInternal("Function _HEAP_realloc_ couldn't re-alloc array");
+  h->maxsize = maxsize;
+}
+
+static inline void _HEAP_free_(HEAPNAME *h) {
+  if (h->items) free(h->items);
+  free(h);
+}
+
+// Pop root, add p
+static inline ITEM _HEAP_heapify_(HEAPNAME *h, ITEM p) {
+  int i=0, swap, test;
+  ITEM root = h->items[0];
+  while (1) {
+    // Find child closest to parent
+    swap = (i<<1) +1;
+    if (swap>=h->size) break;
+    test = swap+1;
+    if ( test < h->size && COMPARE(h->items[test],h->items[swap])>0 ) swap=test;
+    // swap is now closest child
+    // We're done if p closer to root
+    if ( COMPARE(p,h->items[swap])>=0 ) break;
+    // Do swap
+    h->items[i] = h->items[swap];
+    i=swap;
+  }
+  h->items[i] = p;
+  return root;
+}
+
+
+/* This pops the heap */
+static inline ITEM _HEAP_pop_(HEAPNAME *h) {
+  return (h->size<=0?(ITEM)0:_HEAP_heapify_(h, h->items[--h->size]));
+}
+
+static inline ITEM* _HEAP_sort_(HEAPNAME *h, int *n) {
+  int i=0;
+  ITEM* s=NULL;
+  *n = h->size;
+  if (h->size>0) {
+    s = (ITEM*)malloc(h->size*sizeof(ITEM));
+    while (h->size>0) s[i++] = _HEAP_heapify_(h,h->items[--h->size]);
+  }
+  return s;
+}
+
+
+/* Add an item to heap
+   If the heap is full, reallocate
+*/
+static inline void _HEAP_add_(HEAPNAME *h, ITEM p) {
+  int i, parent;
+
+  // If heap is full
+  if (h->size == h->maxsize) _HEAP_realloc_(h, h->maxsize+ADDSIZE);
+
+  for(i = h->size++; i>0; i = parent) {
+    parent = (i-1) >> 1;
+    if ( COMPARE(p, h->items[parent]) < 0 ) break;
+    h->items[i]=h->items[parent];
+  }
+  h->items[i] = p;
+}
+
+
+/*
+  Check if heap is full or item is better than root
+*/
+static inline int _HEAP_accept_(HEAPNAME *h, ITEM p) {
+  if (h->size < h->maxsize) return 1;
+  if (COMPARE(p,h->items[0])<0) return 1;
+  return 0;
+}
+
+
+/* Add item to heap if accepted (as above)
+   If the heap is full, remove root, so heap stays at maxsize
+   Returns the worst of root and p
+   If force!=0, always replace root without comparing
+*/
+static inline ITEM _HEAP_replace_(HEAPNAME *h, ITEM p, int force) {
+  // If heap is not full, do normal add
+  if (h->size < h->maxsize) { _HEAP_add_(h, p); return (ITEM)0; }
+  // If accepted, replace (like pop, but without decreasing the size)
+  if ( force || COMPARE(p,h->items[0])<0 ) return _HEAP_heapify_(h, p);
+  // Otherwise, return original item
+  return p;
+}
+
+
+
+#undef HEAPNAME
+#undef ITEM
+#undef COMPARE
+
+#undef _CONCAT__
+#undef _CONCAT_
+
+#undef _HEAP_clear_
+#undef _HEAP_maxsize_
+#undef _HEAP_size_
+#undef _HEAP_root_
+#undef _HEAP_alloc_
+#undef _HEAP_realloc_
+#undef _HEAP_free_
+#undef _HEAP_heapify_
+#undef _HEAP_pop_
+#undef _HEAP_add_
+#undef _HEAP_accept_
+#undef _HEAP_replace_
+
+#undef HeapErrorInternal
+#undef ADDSIZE

@@ -1,0 +1,164 @@
+/*
+This file is part of the aklib c library
+Copyright 2016-2019 by Anders Krogh.
+aklib licensed under the GPLv3, see the file LICENSE.
+*/
+
+/*
+  Template for stack data structures.
+
+  Before including this file you must define what items the stack stores,
+  e.g. "#define ITEM int" or "#define ITEM mystruct*"
+
+  You may also define STACKNAME (defaults to "Stack")
+  If you use more than one type of stack, you must define STACKNAME for
+  at least one. They must have different names
+
+  These functions are defined (where X is replaced by STACKNAME)
+  If not specified they take the stack as only argument
+  X_alloc     takes initial size as arg and returns stack pointer
+  X_push      pushes new element
+  X_pop       pops stack and return element
+  X_free      frees stack (free content before)
+  X_clear     Resets the stack to size 0 (free content before)
+  X_size      Returns the current number of elements in stack
+  X_maxsize   Returns the size of the current allocation
+  X_top       Returns the last element (without popping)
+
+  NOTE
+
+  * The header undefines everything in the end, so you can include
+  the file multiple times. It means that e.g. STACKNAME and ITEM
+  are undefined after your #include "stack.h"
+
+  * When allocating a stack, you give an initial size. If more items
+  items are added, the stack is re-allocated adding ADDSIZE. Default
+  is 256, but you can redefine, e.g. "#define ADDSIZE 50".
+
+
+  EXAMPLES
+
+  Integer stack. Functions will be named iStack_alloc, iStack_add, etc
+#define STACKNAME iStack
+#define ITEM int
+#include "stack.template"
+
+*/
+
+#include <stdio.h>
+#include <stdlib.h>
+
+// You can define the name of the stack type
+#ifndef STACKNAME
+#define STACKNAME Stack
+#endif
+
+#ifndef ADDSIZE
+#define ADDSIZE 256     // Expand stack by this amount when full
+#endif
+
+
+typedef struct {
+  int maxsize;
+  int size;
+  ITEM* items;   // Array of length maxsize
+} STACKNAME;
+
+// Very strange concatenation in preprocessor requires this
+#define _CONCAT__(A, B) A##B
+#define _CONCAT_(A, B) _CONCAT__(A, B)
+
+// Functions defined
+#define _STACK_clear_   _CONCAT_(STACKNAME,_clear)
+#define _STACK_maxsize_ _CONCAT_(STACKNAME,_maxsize)
+#define _STACK_size_    _CONCAT_(STACKNAME,_size)
+#define _STACK_top_     _CONCAT_(STACKNAME,_top)
+#define _STACK_alloc_   _CONCAT_(STACKNAME,_alloc)
+#define _STACK_realloc_ _CONCAT_(STACKNAME,_realloc)
+#define _STACK_free_    _CONCAT_(STACKNAME,_free)
+#define _STACK_pop_     _CONCAT_(STACKNAME,_pop)
+#define _STACK_push_    _CONCAT_(STACKNAME,_push)
+
+// Query stack etc (note that _STACK_clear_ assumes that items are freed elsewhere)
+static inline void _STACK_clear_(STACKNAME *h) {h->size=0;}
+static inline int _STACK_maxsize_(STACKNAME *h) {return h->maxsize;}
+static inline int _STACK_size_(STACKNAME *h) {return h->size;}
+
+#define StackErrorInternal(x) {fprintf(stderr,"Stack Error: %s\n",x); exit(1); }
+
+static inline ITEM _STACK_top_(STACKNAME *h) {
+  if (h->size) return h->items[h->size-1];
+  // else StackErrorInternal("Function _STACK_top_ called with empty stack");
+  return (ITEM)0;
+}
+
+static inline ITEM _STACK_pop_(STACKNAME *h) {
+  if (h->size) return h->items[--(h->size)];
+  // else StackErrorInternal("Function _STACK_pop_ called with empty stack");
+  return (ITEM)0;
+}
+
+static STACKNAME *_STACK_alloc_(int maxsize) {
+  STACKNAME *h=(STACKNAME*)malloc(sizeof(STACKNAME));
+  if (!h) StackErrorInternal("Function _STACK_alloc_ couldn't malloc");
+  h->maxsize = maxsize;
+  h->size=0;
+  h->items = (ITEM*)malloc(maxsize*sizeof(ITEM));
+  if (!h->items) StackErrorInternal("Function _STACK_alloc_ couldn't malloc array");
+  return h;
+}
+
+static void _STACK_realloc_(STACKNAME *h, int maxsize) {
+  if (h->size>maxsize) StackErrorInternal("_STACK_realloc_: size>maxsize");
+  h->items = (ITEM*)realloc(h->items,maxsize*sizeof(ITEM));
+  if (!h->items) StackErrorInternal("Function _STACK_realloc_ couldn't re-alloc array");
+  h->maxsize = maxsize;
+}
+
+static inline void _STACK_free_(STACKNAME *h) {
+  if (h->items) free(h->items);
+  free(h);
+}
+
+
+/* Add an item to stack
+   If the stack is full, reallocate
+*/
+static inline void _STACK_push_(STACKNAME *h, ITEM p) {
+  // If stack is full
+  if (h->size == h->maxsize) _STACK_realloc_(h, h->maxsize+ADDSIZE);
+  h->items[(h->size)++] = p;
+}
+
+
+// Dummy function that removes warnings for unused functions
+static inline void _CONCAT_(STACKNAME,_dummy_function) (ITEM p) {
+  _STACK_alloc_(7);
+  // _STACK_add_(NULL,0);
+  _STACK_push_(NULL,p);
+  _STACK_pop_(NULL);
+  _STACK_top_(NULL);
+  _STACK_clear_(NULL);
+  _STACK_size_(NULL);
+  _STACK_maxsize_(NULL);
+}
+
+
+#undef STACKNAME
+#undef ITEM
+
+#undef _CONCAT__
+#undef _CONCAT_
+
+#undef _STACK_clear_
+#undef _STACK_maxsize_
+#undef _STACK_size_
+#undef _STACK_top_
+#undef _STACK_alloc_
+#undef _STACK_realloc_
+#undef _STACK_free_
+#undef _STACK_pop_
+#undef _STACK_push_
+
+#undef StackErrorInternal
+#undef ADDSIZE
