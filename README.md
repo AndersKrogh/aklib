@@ -6,7 +6,8 @@ aklib is my C library of various functions and templates made over the
 years and used mainly in the packages abwt and psearch.
 
 Perhaps someone will find some of it useful, but you should be warned
-that I wrote it over 20 years while learning to program.
+that I wrote it over 20 years while gradually improving my programming
+skills.
 
 There is no separate documentation of aklib. Compilation etc is
 described in ABWT and psearch.

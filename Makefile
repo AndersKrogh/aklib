@@ -2,9 +2,11 @@
 # Copyright 2016-2019 by Anders Krogh.
 # aklib licensed under the GPLv3, see the file LICENSE.
 
+
 # Use "make CFLAGS=-O3" or optimization 
 
-OFLAGS = -g
+#OFLAGS = -g
+OFLAGS = -O3
 
 CFLAGS  = $(OFLAGS) $(PROF) -Wall -Wno-unused-function  # Turn off warnings of unused funcs
 # CFLAGS  = -O3 -Wall -Wno-unused-function  # Turn off warnings of unused funcs
