@@ -514,7 +514,7 @@ static int skip_until_char(FILE *fp, int stopchar) {
 
 
 /* Assume that \n> or \n@ has been read and read to end of line
-   ignore anything afer space if save_descr!=0
+   ignore anything after space if save_descr==0
    returns 1 on success
 */
 static int read___ID(FILE *fp, Sequence *seq, int save_descr) {

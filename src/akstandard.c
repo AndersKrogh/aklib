@@ -354,7 +354,7 @@ List *splitString(char *s, char c, int skipEmpty) {
     }
     if ( (!pling && *ptr==c) || *ptr=='\0') {
       *ptr='\0';
-      if ((int)(ptr-s)>0 || !skipEmpty) pushList(r,(void*)s);
+      if ((int)(ptr-s)>0 || !skipEmpty) appendList(r,(void*)s);
       s=ptr+1;
     }
     ++ptr;
